@@ -1,0 +1,458 @@
+/* The system (the Aicher loop; docs/specs/configurator-demonstrator-ux-aicher.md).
+   Module 4 px: every length is a multiple of it, but for 1 and 2 px lines.
+   Type: 13, 15 and 20 px, in the weights 400 and 600. Colours: the
+   palette of palette.js, from the place a wall stands in. State has one
+   rule: what is chosen is filled with the green; what cannot be pressed is
+   drawn in the grey. One grid: the header stands on the three zones'
+   columns; in the controls every row is a label track and four equal
+   tracks, and every key starts on one of those lines. A key is a
+   pictogram over its word; a bar, in the information, is a pictogram
+   beside its word. Rules, not boxes: no cards, no shadows; the zones'
+   rules are drawn as lines inside them, so they move no content.
+   Nunito is not served: its official source offers no woff2 file, so
+   the page uses the system sans and fetches no font from elsewhere. */
+
+:root {
+  --paper: #ffffff;    /* lime white */
+  --ink: #26221e;      /* loam */
+  --grey: #685f56;     /* clay: labels, captions, help */
+  --rule: #e5e0da;     /* rules and the drawing's grid */
+  --view: #f4f2ef;     /* the air of the 3D view */
+  --green: #2e6b3c;    /* the garden: what is chosen */
+  --red: #b3261e;      /* a refused bend only */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --row: 44px;         /* every control at least this tall and wide [B] */
+  --gap: 8px;
+  --edge: 16px;        /* a zone's margin */
+  --label: 72px;       /* the label track of a row */
+  --controls: 368px;
+  --info: 296px;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { margin: 0; }
+
+body {
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 20px;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+button, input, output { font: inherit; color: inherit; }
+
+:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* A browser that cannot run the modules sees this line instead of an empty
+   page. While the modules load it stays hidden; main.js takes it away. */
+.no-modules { margin: 0; padding: 24px 16px; font-size: 20px; line-height: 28px; }
+.js .no-modules { display: none; }
+
+/* Header: the title, the purpose and the mock-up sentence, one per zone. */
+
+.page-header {
+  display: grid;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.page-title { display: contents; }
+.page-header h1, .purpose, .mockup { margin: 0 var(--edge); }
+.page-header h1 { font-size: 20px; line-height: 28px; font-weight: 600; }
+.purpose, .mockup { font-size: 13px; line-height: 16px; color: var(--grey); }
+
+/* Zones */
+
+.app { display: grid; }
+.controls { display: flex; flex-direction: column; gap: var(--gap); padding: var(--edge); }
+.view { position: relative; display: flex; flex-direction: column; background: var(--view); min-height: 0; }
+.view-stage { position: relative; flex: 1 1 auto; min-height: 0; }
+.view-stage canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
+/* The keyboard holds the view: its ring is drawn inside it, 4 px from the edge. */
+.view-stage canvas:focus-visible { outline: 2px solid var(--green); outline-offset: -4px; }
+.info { padding: var(--edge); display: flex; flex-direction: column; gap: 12px; }
+
+/* Laptop, 1100 px and more (placeholder): three columns that do not scroll,
+   the header on the same three columns. */
+@media (min-width: 1100px) {
+  :root {
+    --controls: clamp(368px, 27vw, 440px);
+    --info: clamp(296px, 22vw, 400px);
+  }
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .page-header { flex: none; grid-template-columns: var(--controls) minmax(0, 1fr) var(--info); min-height: 48px; }
+  .app {
+    flex: 1;
+    min-height: 0;
+    grid-template-columns: var(--controls) minmax(0, 1fr) var(--info);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "controls view info";
+  }
+  .controls { grid-area: controls; min-height: 0; overflow-y: auto; box-shadow: inset -1px 0 0 var(--rule); }
+  .view { grid-area: view; }
+  .info { grid-area: info; min-height: 0; overflow-y: auto; box-shadow: inset 1px 0 0 var(--rule); }
+  /* The base line drawing is the one row that takes what is left, all of
+     it, so no hole opens under it on a tall screen. */
+  .line-editor { flex: 1 1 auto; min-height: 232px; display: flex; flex-direction: column; }
+  .line-area { flex: 1 1 auto; min-height: 180px; }
+  .line-foot { flex: none; }
+}
+
+/* Between 760 and 1099 px (placeholder): controls and 3D view side by side */
+@media (min-width: 760px) and (max-width: 1099px) {
+  .app {
+    grid-template-columns: var(--controls) minmax(0, 1fr);
+    grid-template-areas:
+      "controls view"
+      "controls info";
+    grid-template-rows: auto 1fr;
+  }
+  .controls { grid-area: controls; box-shadow: inset -1px 0 0 var(--rule); }
+  .view { grid-area: view; }
+  .info { grid-area: info; }
+  .view-stage { flex: none; aspect-ratio: 6 / 5; max-height: 64svh; }
+  .line-area { height: 200px; }
+}
+
+/* Phone, under 760 px (placeholder): one column, the 3D view first */
+@media (max-width: 759px) {
+  .view-stage { flex: none; aspect-ratio: 6 / 5; max-height: 64svh; }
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "view" "info" "controls";
+  }
+  .view { grid-area: view; }
+  .info { grid-area: info; border-bottom: 1px solid var(--rule); }
+  .controls { grid-area: controls; }
+  .line-area { height: 240px; }
+}
+
+/* Rows: the label in its track, the control on four equal tracks. Spans
+   take two or four of them; a switch, a stepper, the scale and the
+   swatches lay their keys on the same tracks. */
+
+.row, .line-row {
+  display: grid;
+  grid-template-columns: var(--label) minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--gap);
+  flex: none;
+}
+
+.row-label { display: flex; align-items: center; min-height: var(--row); font-weight: 600; }
+.row-control { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--gap); min-width: 0; }
+.span-2 { grid-column: span 2; }
+.span-3 { grid-column: span 3; }
+.span-4 { grid-column: span 4; }
+.switch, .stepper, .scale, .swatches { display: grid; grid-template-columns: subgrid; }
+
+/* A message under a row starts where the row's control starts. */
+.controls > .message { margin-left: calc(var(--label) + var(--gap)); }
+
+.help, .note, .hint { margin: 0; font-size: 13px; line-height: 16px; }
+.message, .readout { margin: 0; }
+
+.help, .hint { color: var(--grey); }
+/* An empty message takes no room but stays a live region. */
+.message:empty { display: none; }
+.message.refused { color: var(--red); }
+.readout { font-variant-numeric: tabular-nums; }
+
+/* Keys: a pictogram over its word, at least 44 by 44 px [B]. */
+
+.key, .button, .quick-pick, .swatch, .tile {
+  min-width: var(--row);
+  min-height: var(--row);
+  border: 1px solid var(--grey);
+  background: var(--paper);
+  cursor: pointer;
+}
+
+.key {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  font-size: 13px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.key .icon { flex: none; }
+
+/* The one colour: its swatch beside its name. */
+.key.one-colour { flex-direction: row; justify-content: flex-start; gap: var(--gap); padding: 2px 8px; }
+
+/* A bar: the pictogram beside the word, the width of its zone. */
+.key.bar {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: var(--gap);
+  width: 100%;
+  padding: 0 12px;
+  font-size: 15px;
+  line-height: 20px;
+  text-align: left;
+}
+
+/* The plan file, the one output, is the one dark bar. */
+.key.bar.primary { border-color: var(--ink); background: var(--ink); color: var(--paper); font-weight: 600; }
+
+.button { padding: 0 12px; }
+
+/* What cannot be pressed is drawn in the grey, on a light rule. */
+button:disabled { color: var(--grey); border-color: var(--rule); cursor: default; }
+
+/* What is chosen is filled with the green, everywhere. */
+.switch-option[aria-pressed="true"],
+.view-button[aria-pressed="true"],
+.quick-pick[aria-pressed="true"],
+.tile[aria-pressed="true"] {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--paper);
+}
+
+.button-row { display: flex; flex-wrap: wrap; gap: var(--gap); }
+.button-row .key.bar { width: auto; }
+
+/* Who stacks it: an indicator, not a key. The three answers lie on the
+   tracks without a box; the wall's one is in the ink, over a bar of the green. */
+.mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--row);
+  padding: 2px 4px;
+  color: var(--grey);
+  font-size: 13px;
+  line-height: 16px;
+}
+.mark.on { color: var(--ink); font-weight: 600; box-shadow: inset 0 -4px 0 var(--green); }
+.stacker-line { margin: 0; color: var(--grey); font-size: 13px; line-height: 16px; }
+
+/* A stepper's value: a field over two tracks, its edge drawn inside it. */
+.value {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--row);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.value output, .value-note { display: block; }
+.value-note { font-size: 13px; line-height: 16px; color: var(--grey); }
+
+.value-input {
+  display: block;
+  width: 100%;
+  min-height: var(--row);
+  border: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: transparent;
+}
+
+.swatch { position: relative; padding: 0; font-weight: 600; }
+
+/* A letter stands on a chip of paper in its swatch's corner, in the ink,
+   so it reads on any colour: no earth tone gives a letter 4.5 to 1 in
+   both the ink and the paper. */
+.letter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+}
+
+
+.quick-picks { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+
+.quick-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: 0 8px;
+  text-align: left;
+}
+
+.swatch-dot {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--grey);
+}
+
+.own-colour-label { display: flex; align-items: center; gap: var(--gap); margin-top: 8px; cursor: pointer; }
+.own-colour { width: 44px; height: 44px; padding: 0; border: 1px solid var(--grey); background: var(--paper); cursor: pointer; }
+
+/* Base line editor: the drawing takes the touch, so a drag does not scroll
+   the page; its readouts sit below it, so they never move it. */
+
+.line-area { display: block; width: 100%; }
+.line-drawing {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.line-foot { display: flex; flex-direction: column; gap: var(--gap); padding-top: 8px; }
+.keys-hint { margin-top: 4px; }
+
+/* Pattern editor, in its dialog; the previews in the picker */
+
+.pattern-caption { margin-bottom: 8px; }
+.pattern-grid { display: block; max-width: 100%; height: auto; touch-action: manipulation; }
+.pattern-grid.tappable { cursor: pointer; }
+
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 8px 0 16px; }
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: var(--gap);
+  padding: 8px;
+  text-align: center;
+}
+.tile svg { display: block; width: 100%; height: auto; }
+.tile-group { margin: 0 0 4px; font-size: 13px; line-height: 16px; color: var(--grey); }
+
+/* 3D view: the hint and the notice over its upper left, the view keys
+   over its lower left, all on the zone's one left edge. */
+
+.view-buttons {
+  position: absolute;
+  left: var(--edge);
+  bottom: var(--edge);
+  display: grid;
+  grid-template-columns: repeat(3, 96px);
+  gap: var(--gap);
+}
+
+.view-hint {
+  position: absolute;
+  top: 12px;
+  left: var(--edge);
+  margin: 0;
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--grey);
+  pointer-events: none;
+}
+
+/* Without WebGL: one line in the zone, which then takes only its room. */
+.view.no-webgl { display: flex; align-items: center; justify-content: center; height: auto; min-height: 120px; }
+.view-empty { margin: 0; padding: 24px 16px; max-width: 32em; text-align: center; }
+
+.view-notice:empty { padding: 0; }
+
+.view-notice {
+  position: absolute;
+  top: 36px;
+  left: var(--edge);
+  margin: 0;
+  padding: 4px 8px;
+  background: var(--paper);
+}
+
+/* Information: the wall in words, its order list, then the actions on it. */
+
+.info-heading { margin: 0; font-size: 13px; line-height: 16px; font-weight: 400; color: var(--grey); }
+.summary-sentence { margin: 0; }
+
+.order-list {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.order-list th, .order-list td {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  font-weight: 400;
+}
+
+.order-list .number { padding-left: 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.order-list thead th { font-size: 13px; color: var(--grey); }
+.order-list tr.other th { color: var(--grey); }
+.row-name { display: inline-flex; align-items: center; gap: var(--gap); }
+
+.row-swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--grey);
+}
+
+.bars { display: flex; flex-direction: column; gap: var(--gap); }
+.limits { margin: 0; padding-left: 20px; }
+.limits li + li { margin-top: 8px; }
+
+/* Dialogs */
+
+.dialog {
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 20px 24px;
+  border: 1px solid var(--grey);
+  color: var(--ink);
+}
+
+.dialog::backdrop { background: rgba(38, 34, 30, 0.35); }
+.dialog-title { margin: 0 0 12px; font-size: 20px; line-height: 28px; font-weight: 600; }
+.dialog-body > p { margin: 0 0 8px; }
+.dialog-foot { display: flex; flex-wrap: wrap; gap: var(--gap); margin-top: 12px; }
+.dialog-foot .key.bar { width: auto; }
+
+/* The drawer (pass 3): the plan and the section in one sheet, the foot
+   under it. The section's keys and its field stand in the right track. */
+.drawer .line-area { position: relative; }
+.section-keys {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: calc((100% - var(--label) - 4 * var(--gap)) / 4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  pointer-events: none;
+}
+.section-keys > * { pointer-events: auto; }
+.section-keys > .section-drawing { flex: 1 1 0; min-height: 0; width: 100%; height: auto; display: block; touch-action: none; }
+.section-keys .key { width: 100%; }
+.dimension-field {
+  position: absolute;
+  width: 72px;
+  z-index: 1;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.dimension-field[hidden] { display: none; }
+.drawer .line-area > .line-drawing { width: auto; }

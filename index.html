@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Earth block wall planner, a mock-up</title>
+  <link rel="icon" href="data:,">
+  <script>
+    // While the modules load, the line for a browser that cannot run them
+    // stays hidden; it shows when one of them fails. main.js takes it away.
+    document.documentElement.className = 'js';
+    window.addEventListener('error', function () { document.documentElement.className = ''; }, true);
+  </script>
+  <script nomodule>document.documentElement.className = '';</script>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+  <!-- Every module the page imports, so the browser fetches them in one round. -->
+  <link rel="modulepreload" href="src/main.js">
+  <link rel="modulepreload" href="src/block.js">
+  <link rel="modulepreload" href="src/texts.js">
+  <link rel="modulepreload" href="src/state.js">
+  <link rel="modulepreload" href="src/plan.js">
+  <link rel="modulepreload" href="src/fillet.js">
+  <link rel="modulepreload" href="src/snap.js">
+  <link rel="modulepreload" href="src/dimensions.js">
+  <link rel="modulepreload" href="src/fitting.js">
+  <link rel="modulepreload" href="src/counts.js">
+  <link rel="modulepreload" href="src/mapping.js">
+  <link rel="modulepreload" href="src/line.js">
+  <link rel="modulepreload" href="src/limits.js">
+  <link rel="modulepreload" href="src/bond.js">
+  <link rel="modulepreload" href="src/stacker.js">
+  <link rel="modulepreload" href="src/turns.js">
+  <link rel="modulepreload" href="src/view3d.js">
+  <link rel="modulepreload" href="src/ui/controls.js">
+  <link rel="modulepreload" href="src/ui/pattern-editor.js">
+  <link rel="modulepreload" href="src/ui/line-editor.js">
+  <link rel="modulepreload" href="src/ui/info.js">
+  <link rel="modulepreload" href="src/ui/dialogs.js">
+  <link rel="modulepreload" href="src/ui/dom.js">
+  <link rel="modulepreload" href="src/colour.js">
+  <link rel="modulepreload" href="src/palette.js">
+  <link rel="modulepreload" href="src/pictograms.js">
+  <link rel="modulepreload" href="src/motif.js">
+  <link rel="modulepreload" href="vendor/three/three.module.min.js">
+  <link rel="modulepreload" href="vendor/three/addons/controls/OrbitControls.js">
+  <link rel="modulepreload" href="vendor/three/addons/geometries/RoundedBoxGeometry.js">
+  <link rel="modulepreload" href="src/framing.js">
+  <link rel="modulepreload" href="src/tilegrid.js">
+  <link rel="modulepreload" href="src/linekeys.js">
+  <link rel="modulepreload" href="src/linehit.js">
+  <link rel="modulepreload" href="src/labels.js">
+  <link rel="modulepreload" href="src/brushkeys.js">
+  <link rel="modulepreload" href="vendor/three/three.core.min.js">
+  <script type="module" src="src/main.js"></script>
+</head>
+<body>
+  <p class="no-modules" id="no-modules">This planner needs a recent browser with JavaScript switched on.</p>
+  <header class="page-header">
+    <div class="page-title" id="header"></div>
+  </header>
+  <main class="app">
+    <section class="controls" id="controls" aria-label="Controls"></section>
+    <section class="view" id="view" aria-label="3D view"></section>
+    <section class="info" id="info" aria-labelledby="summary-heading"></section>
+  </main>
+</body>
+</html>
