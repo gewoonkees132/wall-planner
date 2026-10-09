@@ -201,7 +201,7 @@ const NAMES = Object.fromEntries(Object.entries(CODES).map(([field, codes]) => [
 
 const centimetres = (metres) => Math.round(metres * 100);
 const bare = (hex) => hex.slice(1);
-const MAX_COORDINATE = 50; // m either way, placeholder: a sane bound on a point
+const MAX_COORDINATE = MAX_LENGTH; // m either way: a point lies no farther from the start than the longest line runs
 const MAX_TILE = 16; // rows or columns, placeholder
 
 export function encodeState(state) {

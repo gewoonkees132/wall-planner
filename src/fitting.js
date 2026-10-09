@@ -2,17 +2,17 @@
 // red, the 3D view, the counts, the plan file and the address keep the last
 // wall that fits. Pure: no browser objects.
 
-import { computeWall } from './plan.js';
-import { straightPoints, encodeState } from './state.js';
+import { computeWall, noWall } from './plan.js';
+import { encodeState } from './state.js';
 
 // A state read from an address: its own wall when it fits. Otherwise there
-// is no earlier wall to keep, so the same choices on a straight line of the
-// state's length.
+// is no earlier wall to keep, and no wall is shown (pass 4, part 12.1,
+// rule 4): until pass 4 a straight line of its length stood in, which
+// nobody had drawn.
 export function openFitting(state) {
   const wall = computeWall(state);
   if (wall.ok) return { state, wall };
-  const straight = { ...state, points: straightPoints(state.length), corners: [] };
-  return { state: straight, wall: computeWall(straight) };
+  return { state, wall: noWall(state, wall) };
 }
 
 // After a change: the new wall when it fits; else the new choices on the

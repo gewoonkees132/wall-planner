@@ -27,6 +27,8 @@ export function createInfo(root) {
       el('th', { scope: 'col', class: 'number' }, T.total))),
     body);
 
+  // The robot split: how many blocks people stack and how many are for a robot, under the list.
+  const split = el('p', { class: 'split-line', id: 'split-line' });
   const limits = createDialog({ id: 'limits-dialog', title: T.limitsTitle, closeText: T.close });
   const limitList = el('ul', { class: 'limits' });
   limits.body.append(limitList, el('p', { class: 'help' }, T.footer));
@@ -37,6 +39,7 @@ export function createInfo(root) {
     el('h2', { class: 'info-heading', id: 'summary-heading' }, T.heading),
     sentence,
     table,
+    split,
     bars,
     limits.node,
   );
@@ -51,11 +54,12 @@ export function createInfo(root) {
 
   let shownKey = ''; // what the information shows: it is built again only when that changes
 
-  function update({ state, list, text }) {
-    const key = JSON.stringify([text, list, state.vary, state.colour, state.types, state.oneColour]);
+  function update({ state, list, text, splitText = '' }) {
+    const key = JSON.stringify([text, list, splitText, state.vary, state.colour, state.types, state.oneColour]);
     if (key === shownKey) return;
     shownKey = key;
     sentence.textContent = text;
+    split.textContent = splitText;
     const rows = list.types.map((t) => {
       let colour = t.colour;
       if (!state.colour && state.vary === 'depth') colour = shade(state.oneColour, 1 - (0.45 * t.type) / Math.max(1, state.types - 1));

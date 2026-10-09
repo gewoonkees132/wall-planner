@@ -7,7 +7,9 @@
 // one factor, so the arcs meet tangentially. Pure: no browser objects.
 
 const EPS = 1e-9;
-// A sharp corner is square: 90 degrees, within half a degree (placeholder).
+// A sharp corner is square at 90 degrees, within half a degree
+// (placeholder): it is laid from whole blocks. Since 2026-10-09 any other
+// sharp corner is allowed too, laid from cut blocks (cut.js).
 export const SQUARE_TOLERANCE = 0.5;
 
 const turnOf = (from, to) => {
@@ -68,12 +70,12 @@ export function cornersOf(points, kinds = []) {
 }
 
 // The corners the wall refuses: a round or free corner under the minimum
-// bend, after scaling ('tight'); a sharp corner that is not square ('square').
+// bend, after scaling ('tight'). A sharp corner is never refused for its
+// angle (Kees, 2026-10-09: "for sharp corners it should mark it and allow it").
 export function refusals(corners, minimum) {
   const out = [];
   for (const c of corners) {
-    if (c.kind === 'sharp' && !c.square) out.push({ ...c, reason: 'square' });
-    else if ((c.kind === 'free' || c.kind === 'round') && c.radius < minimum - 1e-9) out.push({ ...c, reason: 'tight' });
+    if ((c.kind === 'free' || c.kind === 'round') && c.radius < minimum - 1e-9) out.push({ ...c, reason: 'tight' });
   }
   return out;
 }

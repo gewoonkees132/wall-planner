@@ -50,15 +50,31 @@ export const BRUSH_STEP = 2.5; // degrees
 export const BRUSH_RADIUS = 2; // cells
 export const MAX_TURNS = 60; // stamps a wall may carry, placeholder
 export const MAX_GAP = 0.02; // m, widest gap on the outer face of a curve, placeholder [B]
+// The robot split (Kees, 2026-10-09: "for the curves adjust the to tight
+// limit, to 0.8M, from 1.2 to 0.8 advise the subsection to be done by
+// robots"). On the wall as it opens, an arc of HAND_RADIUS or more is
+// people's, one from ROBOT_RADIUS up to it the robot's, in cut blocks, and
+// one under ROBOT_RADIUS is refused. Placeholders, but Kees's [K]. A deeper
+// unit scales both (limits.js, bendBands).
+export const HAND_RADIUS = 1.2; // m [K]
+export const ROBOT_RADIUS = 0.8; // m [K]
+// An arc under this many times the people's limit asks for a template (revision 1 had twice the minimum radius).
+export const TEMPLATE_FACTOR = 2;
+// A cut block keeps at least this much on its shorter face, in m, placeholder.
+export const MIN_CUT_FACE = 0.04;
 
 export const MIN_LENGTH = 0.48; // m, two blocks, placeholder
-export const MAX_LENGTH = 9.96; // m, the longest whole number of half blocks within 10 m (placeholder) [A]
+// Kees, 2026-10-08: no maximum length for a wall ("make it infinate"). What
+// stays is a guard, so that a slip of the keys cannot build a wall the page
+// cannot draw: a line runs at most this far, in m, and no point of it lies
+// farther than this from the start. Before, 9.96 m, the longest whole number
+// of half blocks within 10 m. Placeholder.
+export const MAX_LENGTH = 1000;
 export const MAX_WALL_HEIGHT = 2.0; // m, the whole wall [K]
 export const MORTAR_ABOVE = 1.0; // m, mortar recommended above this [K]
 
 export const EYE_HEIGHT = 1.6; // m, placeholder
 export const PERSON_HEIGHT = 1.75; // m, placeholder
-export const PERSON_OFFSET = 1.0; // m from the start end, on the front side, placeholder
 
 // Depth types: from 115 to 175 mm in equal steps. The ends [H], the steps placeholder.
 const DEPTH_TYPES = Object.freeze({

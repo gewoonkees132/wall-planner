@@ -36,15 +36,23 @@ function switchControl(name, options, onSelect) {
 }
 
 export function createControls(root, { actions, lineEditorRoot }) {
-  // Who stacks it: the three answers as a scale of pictograms, the wall's
-  // answer filled; the answer in words for a screen reader, and the reason.
-  const marks = STEPS.map((step) => el('span', { class: `mark${step === 'template' ? ' span-2' : ''}`, 'data-step': step },
-    pictogram(STEP_ICONS[step]), T.stacker.scale[step]));
+  // Who stacks it: the three workers as a scale of pictograms, each with its
+  // count of blocks beside it (the robot split, 2026-10-09); the workers the
+  // wall has marked; the split in words for a screen reader, and the reasons.
+  const markCounts = {};
+  const marks = STEPS.map((step) => {
+    markCounts[step] = el('span', { class: 'mark-count' }, '0');
+    return el('span', { class: `mark${step === 'template' ? ' span-2' : ''}`, 'data-step': step },
+      el('span', { class: 'mark-top' }, pictogram(STEP_ICONS[step]), markCounts[step]),
+      el('span', { class: 'mark-word' }, T.stacker.scale[step]));
+  });
+  // The wall's answer, the highest worker it has; then the split, block by block, for a screen reader.
   const answer = el('span', { class: 'stacker-answer sr-only' });
+  const spoken = el('span', { class: 'stacker-split sr-only' });
   const reason = el('span', { class: 'stacker-reason' });
   const stacker = row(T.stacker.label, [
     el('div', { class: 'scale span-4', 'aria-hidden': 'true' }, marks),
-    el('p', { class: 'stacker-line span-4' }, answer, reason),
+    el('p', { class: 'stacker-line span-4' }, answer, ' ', spoken, ' ', reason),
   ], { extra: 'stacker' });
   stacker.setAttribute('role', 'status');
   stacker.setAttribute('aria-live', 'polite');
@@ -181,9 +189,16 @@ export function createControls(root, { actions, lineEditorRoot }) {
     if (shown === shownKey) return;
     shownKey = shown;
 
+    // The split: each worker's blocks, the robot's stretches named first, else the template's, else the hand's.
     answer.textContent = T.stacker[who.key];
-    reason.textContent = T.stacker.reasons[who.reason];
-    for (const mark of marks) mark.classList.toggle('on', mark.dataset.step === who.key);
+    spoken.textContent = T.stacker.spoken(who);
+    const named = who.reasons.robot.length ? who.reasons.robot : who.reasons.template.length ? who.reasons.template : who.reasons.hand;
+    reason.textContent = T.stacker.line(named);
+    for (const mark of marks) {
+      const step = mark.dataset.step;
+      markCounts[step].textContent = String(who.counts[step]);
+      mark.classList.toggle('on', who.counts[step] > 0);
+    }
 
     if (state.preset !== shownMotif) {
       const icon = pictogram(state.preset);
@@ -192,6 +207,7 @@ export function createControls(root, { actions, lineEditorRoot }) {
       shownMotif = state.preset;
     }
     motifName.data = state.preset === 'digit' ? `${T.pattern.presets.digit} ${state.digit}` : T.pattern.presets[state.preset];
+    motifButton.setAttribute('aria-label', T.motif.named(motifName.data));
     editButton.hidden = isImage(state.preset);
     const digitShown = state.preset === 'digit';
     digitLess.hidden = !digitShown;

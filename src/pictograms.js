@@ -32,6 +32,8 @@ export const PICTOGRAMS = Object.freeze({
   // The base line: a straight line between its two end points; a point struck out.
   straight: { strokes: ['M4 10 H16'], fills: [disc(4, 10, 2), disc(16, 10, 2)] },
   'remove-point': { strokes: ['M2 10 H6 M14 10 H18', 'M4 16 L16 4'], fills: [disc(10, 10, 3)] },
+  // Pass 5: Fit, a refused bend made to fit: a check mark at 45 degrees.
+  fit: { strokes: ['M3 10 L8 15 L17 6'] },
   // Taking a dialog away: two strokes at 45 degrees.
   dismiss: { strokes: ['M5 5 L15 15 M15 5 L5 15'] },
   // The three views, from the side: the wall, and you standing near it or away.

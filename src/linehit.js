@@ -8,7 +8,9 @@ import { stretchOf } from './line.js';
 
 export const HIT = 22; // px, half of 44 [B, R]
 
-export function hitTarget({ points, ghosts, line, toScreen }, at) {
+// Pass 5 (part 13.1, rule 7): the handle at an arc's middle is a target as
+// a point is, the nearest of them winning.
+export function hitTarget({ points, ghosts, arcs = [], line, toScreen }, at) {
   let best = null;
   const consider = (target, [sx, sy]) => {
     const dx = Math.abs(sx - at[0]);
@@ -18,6 +20,7 @@ export function hitTarget({ points, ghosts, line, toScreen }, at) {
     if (!best || d < best.d) best = { ...target, d };
   };
   points.forEach((p, index) => consider({ type: 'point', index }, toScreen(p)));
+  for (const a of arcs) consider({ type: 'arc', index: a.index }, a.screen);
   for (const g of ghosts) consider({ type: 'ghost', stretch: g.stretch, plan: g.plan }, g.screen);
   if (best) return best;
   let nearest = null;

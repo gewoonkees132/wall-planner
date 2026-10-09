@@ -30,6 +30,23 @@ const m1 = (metres) => fixed(metres, 1);
 const halves = (h) => (h === 1 ? '1 of them a half block' : `${h} of them half blocks`);
 const degrees = (d) => `${d} ${Math.abs(d) === 1 ? 'degree' : 'degrees'}`;
 
+// Why a wall asks for a worker (the robot split, 2026-10-09): the reasons
+// of revision 1, and a cut corner or an arc named by its point.
+const REASONS = {
+  none: 'No block is turned.',
+  set: `Blocks turn to ${SET_ANGLES.length} set angles.`,
+  free: 'Blocks turn to their own angles.',
+  depth: 'Blocks of more than one depth.',
+};
+function why(reason) {
+  if (reason.kind === 'corner') return `Corner ${reason.point}, ${degrees(reason.degrees)}: cut blocks.`;
+  if (reason.kind === 'arc') return `Arc ${reason.point}, R ${m2(reason.radius)} m: cut blocks.`;
+  if (reason.kind === 'arcTemplate') return `Arc ${reason.point}, R ${m2(reason.radius)} m: with a template.`;
+  return REASONS[reason.kind];
+}
+// The Who row's line: at most two reasons, then how many more.
+const SHOWN_REASONS = 2;
+
 export const TEXTS = {
   page: {
     noModules: 'This planner needs a recent browser with JavaScript switched on.',
@@ -52,7 +69,8 @@ export const TEXTS = {
     tab: 'Earth block wall planner, a mock-up',
   },
 
-  // Who stacks it: computed from the wall, never chosen.
+  // Who stacks it: computed from the wall, never chosen; since the robot
+  // split, block by block, with each worker's count.
   stacker: {
     label: 'Who stacks it',
     hand: 'You',
@@ -64,26 +82,42 @@ export const TEXTS = {
       template: 'With a template',
       robot: 'A robot',
     },
-    reasons: {
-      none: 'No block is turned.',
-      set: `Blocks turn to ${SET_ANGLES.length} set angles.`,
-      free: 'Blocks turn to their own angles.',
-      bend: 'The bend is near its limit.',
-      depth: 'Blocks of more than one depth.',
+    reasons: REASONS,
+    why,
+    line: (reasons) => {
+      const shown = reasons.slice(0, SHOWN_REASONS).map(why);
+      const more = reasons.length - shown.length;
+      return [...shown, ...(more > 0 ? [`${more} more.`] : [])].join(' ');
     },
+    // What a screen reader hears: each worker's blocks and metres of line.
+    spoken: ({ counts, metres }) => ['hand', 'template', 'robot'].map((step) => {
+      const word = { hand: 'You', template: 'With a template', robot: 'A robot' }[step];
+      return `${word}: ${plural(counts[step], 'block', 'blocks')}, ${m1(metres[step])} m.`;
+    }).join(' '),
   },
 
   wall: {
     lengthLabel: 'Length',
     lengthValue: (metres) => `${m2(metres)} m`,
     rounded: (metres) => `Rounded to ${m2(metres)} m.`,
-    outOfRange: `Lengths run from ${m2(MIN_LENGTH)} m to ${m2(MAX_LENGTH)} m.`,
+    outOfRange: `Lengths run from ${m2(MIN_LENGTH)} m to ${MAX_LENGTH.toLocaleString('en-GB')} m.`,
     stepNote: `Steps of half a block, ${m2(HALF_LENGTH)} m.`,
     baseLineCaption: 'Base line, seen from above',
     drawerLabel: 'Wall',
     baseLineHelp: 'Drag a point. Tap the line to add one.',
-    // The length is in the Length field; the readout names the bend only.
-    readoutBend: (metres, radius, minimum) => `Bend: ${m1(radius)} m, minimum ${m1(minimum)} m.`,
+    // Pass 4: each arc's radius is its R dimension; the readout says the limit, once.
+    minimumBend: (minimum) => `Minimum bend: ${m2(minimum)} m.`,
+    // The line a screen reader hears, which sees no R dimension: the tightest radius against the minimum.
+    spokenBend: (radius, minimum) => `Bend: ${m2(radius)} m, minimum ${m2(minimum)} m.`,
+    // Pass 4: what a refusal, a field or the section says.
+    wayBack: 'Move a point, or Undo.',
+    nearHint: 'The wall comes too near itself.',
+    wholeHint: 'No whole blocks fit between these corners.',
+    notNumber: 'Not a number: type metres, as 1.20.',
+    noCorner: 'No corner at this point.',
+    coursesCaption: 'Courses',
+    more: 'More',
+    less: 'Less',
     start: 'Start',
     front: 'Front',
     undo: 'Undo',
@@ -91,11 +125,25 @@ export const TEXTS = {
     noRoom: 'No room for another point here.',
     // What the drawing says in red when a bend is refused; the 3D view says it keeps the last wall that fits.
     refusedHint: 'Too tight: a larger radius, or Undo.',
-    squareHint: 'A sharp corner is square: 90 degrees.',
     stretchField: (k) => `Stretch ${k}: length`,
     cornerField: (i) => `Corner ${i}: radius`,
     tooTight: (minimum) => `This bend is under ${m1(minimum)} m. Move the points apart or remove one.`,
     afterRelease: 'Showing the last wall that fits. Move the points apart, remove one, or press Undo.',
+    // Pass 5 (part 13.1): the keys of a picked point and of a refusal; what
+    // the hint line says while a point is picked, while a corner's field is
+    // open, and when a bend is too tight.
+    remove: 'Remove',
+    fit: 'Fit',
+    pickHint: 'Tap where it goes.',
+    radiusRange: (min, max) => `R from ${m2(min)} to ${m2(max)} m.`,
+    radiusSet: (set, drawn) => `R${m2(set)} set; drawn R${m2(drawn)}, the room there.`,
+    noRoom: (max) => `Room here for R${m2(max)} at most.`,
+    lifted: (min) => `Lifted to the minimum, R${m2(min)}.`,
+    scaledTo: (drawn) => `Drawn at R${m2(drawn)}, the room there.`,
+    tightRoom: (radius) => `Too tight: room for R${m2(radius)};`,
+    tightSet: (radius) => `Too tight: R${m2(radius)};`,
+    tightNeed: (minimum) => `the blocks need R${m2(minimum)}.`,
+    fitWayBack: 'Fit, or Undo.',
     coursesLabel: 'Earth courses',
     heightValue: (metres) => `${m2(metres)} m`,
     highest: `Highest wall: ${m1(MAX_WALL_HEIGHT)} m.`,
@@ -107,6 +155,8 @@ export const TEXTS = {
   motif: {
     label: 'Motif',
     choose: 'Choose a motif',
+    // The motif key's name for a screen reader starts with the word it shows (WCAG 2.2, criterion 2.5.3).
+    named: (name) => `${name}: choose a motif`,
     edit: 'Edit cells',
     images: 'Images',
     patterns: 'Patterns',
@@ -170,11 +220,14 @@ export const TEXTS = {
   view: {
     // What the keyboard does on the 3D view, in the place of the hint, while it holds the view.
     keysHint: 'Arrows pick a block. Enter turns it.',
-    close: 'Close, 1 m',
-    garden: 'Garden, 4 m',
-    street: 'Street, 10 m',
+    // The three views, and where the eye stands: on the ground from the wall's nearest part (pass 6, part 14.1, rule 2).
+    close: 'Close',
+    garden: 'Garden',
+    street: 'Street',
+    at: (view, metres) => `${view}, ${metres} m`,
     hint: 'Drag to look around. Tap a block to turn it.',
     lastFits: 'Showing the last wall that fits.',
+    noneFits: 'No wall fits this line yet.',
     noWebgl: 'No 3D view: this browser has no WebGL.',
   },
 
@@ -201,6 +254,15 @@ export const TEXTS = {
       const kindText = kinds ? ` in ${plural(kinds.count, kinds.kind, `${kinds.kind}s`)}` : '';
       const turnedText = turned > 0 ? `, ${turned} of them turned` : '';
       return `This wall takes ${plural(total, 'earth block', 'earth blocks')}${kindText}, ${halves(half)}${turnedText}. About ${whole(kg)} kg on ${plural(pallets, 'pallet', 'pallets')}.`;
+    },
+    noWall: 'Nothing to stack until the line fits.',
+    // The robot split: how many blocks people stack, how many are for a robot, and how many of those are cut.
+    split: ({ people, robot, cut }) => {
+      if (robot === 0) return `For people: all ${plural(people, 'block', 'blocks')}.`;
+      let cutText = cut === 1 ? ', 1 of them a cut block' : `, ${cut} of them cut blocks`;
+      if (cut === 0) cutText = '';
+      else if (cut === robot) cutText = robot === 1 ? ', a cut block' : ', all cut blocks';
+      return `For people: ${plural(people, 'block', 'blocks')}. For a robot: ${robot}${cutText}.`;
     },
     unit: 'Unit',
     full: 'Full',

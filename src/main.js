@@ -6,7 +6,7 @@
 import { BLOCK, MAX_TURNS, MORTAR_ABOVE } from './block.js';
 import { TEXTS } from './texts.js';
 import {
-  defaultState, withLength, withCourses, withPreset, withDigit, withVary, withAngles, withColourOn, withTypes,
+  defaultState, withCourses, withPreset, withDigit, withVary, withAngles, withColourOn, withTypes,
   withColour, withOneColour, withTurn, withTurnsCleared, withTurnDir, withView, withCellCycled, withTile, withPoints,
   encodeState, decodeState, RANGES,
 } from './state.js';
@@ -16,7 +16,7 @@ import { orderList, summary } from './counts.js';
 import { activeTile, patternTypes, deepestDepth } from './mapping.js';
 import { presetTile, IMAGE_PRESETS, PATTERN_PRESETS, isImage } from './motif.js';
 import { baseLine } from './line.js';
-import { minRadius } from './limits.js';
+import { bendBands } from './limits.js';
 import { pitchOf, wallHeight } from './bond.js';
 import { whoStacks } from './stacker.js';
 import { createView3d } from './view3d.js';
@@ -25,6 +25,7 @@ import { createPatternEditor, createPreview } from './ui/pattern-editor.js';
 import { createLineEditor } from './ui/line-editor.js';
 import { createInfo } from './ui/info.js';
 import { createDialog, textDialog, opener } from './ui/dialogs.js';
+import { createEdits } from './edits.js';
 import { el, svg, key } from './ui/dom.js';
 
 // The modules run, so the line for a browser that cannot run them goes.
@@ -44,6 +45,8 @@ let drawnWall = null;
 let tileHistory = [];
 let drawerHistory = []; // the drawer's: points, corners, courses and length before each edit
 let turnHistory = [];
+// Pass 4 (part 12.1, rule 13): the order of the drawer's edits and the turns, for Ctrl+Z.
+const edits = createEdits();
 let dragging = false;
 let scheduled = false;
 let dirty = false; // the state changed and its wall is not computed yet
@@ -108,6 +111,7 @@ const actions = {
   setPreset(preset) {
     tileHistory = [];
     turnHistory = [];
+    edits.clear('turn');
     act((s) => withPreset(s, preset));
   },
   setBlocks(value) {
@@ -123,11 +127,13 @@ const actions = {
   undoTurn() {
     if (!turnHistory.length) return;
     const previous = turnHistory.pop();
+    edits.forget('turn');
     act((s) => ({ ...s, turns: previous }));
   },
   resetTurns() {
     if (!state.turns.length) return;
     turnHistory.push(state.turns);
+    edits.push('turn');
     act((s) => withTurnsCleared(s));
   },
   setColourOn(on) {
@@ -162,11 +168,19 @@ const actions = {
 const snapshot = (s) => JSON.stringify([s.points, s.corners, s.courses, s.length]);
 function remember() {
   drawerHistory.push({ points: state.points, corners: state.corners, courses: state.courses, length: state.length });
+  edits.push('drawer');
 }
 const unchanged = () => drawerHistory.length > 0 && snapshot(drawerHistory.at(-1)) === snapshot(state);
+// An edit that changed nothing leaves no step to undo (pass 4, part 12.1, rule 6).
+function dropIfUnchanged() {
+  if (!unchanged()) return;
+  drawerHistory.pop();
+  edits.forget('drawer');
+}
 function undoDrawer() {
   if (!drawerHistory.length) return;
   const previous = drawerHistory.pop();
+  edits.forget('drawer');
   lineEditor.clearFlash();
   act((s) => ({ ...s, ...previous }));
 }
@@ -185,15 +199,17 @@ const lineEditor = createLineEditor(lineRoot, {
     } else if (type === 'end') {
       dragging = false;
       act(apply);
-      if (unchanged()) drawerHistory.pop();
+      dropIfUnchanged();
       schedule();
     } else if (type === 'replace') {
       remember();
       act(apply);
-    } else if (type === 'courses' || type === 'length') {
+      dropIfUnchanged();
+      schedule();
+    } else if (type === 'courses') {
       remember();
-      act((s) => (type === 'courses' ? withCourses(s, value) : withLength(s, value)));
-      if (unchanged()) drawerHistory.pop();
+      act((s) => withCourses(s, value));
+      dropIfUnchanged();
       schedule();
     } else if (type === 'undo') {
       undoDrawer();
@@ -282,6 +298,7 @@ const view = createView3d(byId('view'), {
       return;
     }
     turnHistory.push(state.turns);
+    edits.push('turn');
     act((s) => withTurn(s, { x: unit.position, course: unit.course, dir: s.turnDir === 'left' ? -1 : 1 }));
   },
 });
@@ -314,9 +331,11 @@ window.addEventListener('hashchange', () => {
   tileHistory = [];
   drawerHistory = [];
   turnHistory = [];
+  edits.clear();
   wall = computeWall(state);
   fitting = openFitting(state);
   dirty = false;
+  lineEditor.refit();
   view.setView(state.view);
   schedule();
 });
@@ -327,7 +346,8 @@ function render() {
   const shown = fitting.wall;
   const shownState = fitting.state;
   const list = orderList(shown, shownState);
-  const minimum = minRadius(deepestDepth(state), pitchOf({ rotation: state.vary === 'rotation' }).p);
+  // The robot split: the drawer's limit is the robot's, 0.80 m on the wall as it opens.
+  const minimum = bendBands(deepestDepth(state), pitchOf({ rotation: state.vary === 'rotation' }).p).robot;
   const who = whoStacks(shown, shownState);
   controls.update(state, shown, { who, canUndoTurn: turnHistory.length > 0 });
   const line = wall.line || baseLine(state.points, state.corners);
@@ -349,8 +369,11 @@ function render() {
     courses: state.courses,
     coursesRange: RANGES.courses,
     height: wallHeight(state.courses),
-    length: shown.lambda ?? state.length,
+    // Pass 5 (part 13.1, rule 1): the length told is the wall's, as the plan file has it.
+    told: shown.length,
     notes,
+    // The robot split: the band split by worker, for a line that fits.
+    split: wall.ok && wall.split ? wall.split.subsections : [],
   });
   if (!isImage(state.preset)) {
     patternEditor.update({
@@ -365,8 +388,11 @@ function render() {
   } else if (cells.isOpen()) {
     cells.close();
   }
-  info.update({ state: shownState, list, text: summary(shown, shownState, list) });
-  view.setNotice(!wall.ok);
+  info.update({
+    state: shownState, list, text: shown.none ? TEXTS.info.noWall : summary(shown, shownState, list),
+    splitText: shown.none ? '' : TEXTS.info.split(list),
+  });
+  view.setNotice(shown.none ? TEXTS.view.noneFits : !wall.ok);
   view.setBrush(state.vary === 'rotation');
   if (shown !== drawnWall) {
     view.setWall(shown, shown.frame);
@@ -374,13 +400,15 @@ function render() {
   }
 }
 
-// Ctrl+Z (Cmd+Z) steps the drawer back, anywhere but in a text field or a dialog.
+// Ctrl+Z (Cmd+Z) takes back the last thing done, of the drawer's edits and
+// the turns (pass 4, part 12.1, rule 13), anywhere but in a text field or a dialog.
 document.addEventListener('keydown', (event) => {
   if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'z') return;
   const { target } = event;
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || document.querySelector('dialog[open]')) return;
   event.preventDefault();
-  undoDrawer();
+  if (edits.last() === 'turn') actions.undoTurn();
+  else undoDrawer();
 });
 
 view.setView(state.view);

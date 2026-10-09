@@ -40,6 +40,8 @@ export function orderList(wall, state) {
   const mass = earth.reduce((sum, u) => sum + unitMass(u), 0);
   const pallets = Math.max(1, Math.ceil(mass / PALLET_LOAD - 1e-9));
   const earthCount = countOf(earth);
+  // The robot split: the blocks people stack, the ones for a robot, and how many of those are cut.
+  const robot = earth.filter((u) => u.by === 'robot').length;
   return {
     types,
     base: countOf(wall.units.filter((u) => u.kind === 'base')),
@@ -49,6 +51,9 @@ export function orderList(wall, state) {
     turned: earth.filter((u) => Math.abs(u.rotationDeg) > 1e-9).length,
     mass,
     pallets,
+    people: earth.length - robot,
+    robot,
+    cut: earth.filter((u) => u.cut).length,
   };
 }
 

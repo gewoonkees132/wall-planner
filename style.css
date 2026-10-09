@@ -245,6 +245,12 @@ button:disabled { color: var(--grey); border-color: var(--rule); cursor: default
 }
 .mark.on { color: var(--ink); font-weight: 600; box-shadow: inset 0 -4px 0 var(--green); }
 .stacker-line { margin: 0; color: var(--grey); font-size: 13px; line-height: 16px; }
+/* The robot split: each worker's count of blocks beside its pictogram. */
+.mark-top { display: flex; align-items: center; gap: 4px; }
+.mark-count { font-variant-numeric: tabular-nums; }
+/* Under the order list: how many blocks people stack, how many are for a robot. */
+.split-line { margin: 0; }
+.split-line:empty { display: none; }
 
 /* A stepper's value: a field over two tracks, its edge drawn inside it. */
 .value {
@@ -447,6 +453,8 @@ button:disabled { color: var(--grey); border-color: var(--rule); cursor: default
 .section-keys > * { pointer-events: auto; }
 .section-keys > .section-drawing { flex: 1 1 0; min-height: 0; width: 100%; height: auto; display: block; touch-action: none; }
 .section-keys .key { width: 100%; }
+/* Pass 4: the section's track is named, as every row is. */
+.section-label { flex: none; height: 16px; font-size: 13px; line-height: 16px; color: var(--grey); text-align: center; }
 .dimension-field {
   position: absolute;
   width: 72px;
@@ -455,4 +463,11 @@ button:disabled { color: var(--grey); border-color: var(--rule); cursor: default
   box-shadow: inset 0 0 0 1px var(--ink);
 }
 .dimension-field[hidden] { display: none; }
+/* Pass 5 (part 13.1, rules 1, 5 and 8): the foot tells the wall's length in
+   words, where the field was; Fit, Undo and Remove keep their tracks, so a
+   key that comes and goes moves no other. */
+.told { grid-column: 1; display: flex; align-items: center; min-height: var(--row); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.line-row .fit-key { grid-column: 2; }
+.line-row .undo-key { grid-column: 3; }
+.line-row .remove-key { grid-column: 4; }
 .drawer .line-area > .line-drawing { width: auto; }

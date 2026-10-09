@@ -130,7 +130,7 @@ export function mapUnits(layout, motif) {
     if (u.kind !== 'earth') {
       return {
         ...u, type: u.kind, letter: null, colour: u.kind === 'base' ? BASE_COLOUR : CAP_COLOUR,
-        depthMm: deepest, rotationDeg: 0, value: null, number: null,
+        depthMm: u.corner ? BLOCK.depth : deepest, rotationDeg: 0, value: null, number: null,
       };
     }
     const { r, q } = cellOf(u, layout.p);
@@ -151,14 +151,18 @@ export function mapUnits(layout, motif) {
     // The depth, for Depth: the tile number among the depths, or the value's step.
     let depthIdx = 0;
     let depthMm = BLOCK.depth;
-    if (depths) {
+    if (depths && u.corner) {
+      // Pass 4 (part 12.1, rule 2): a unit at a sharp corner keeps the base depth.
+      depthMm = depths[0];
+    } else if (depths) {
       depthIdx = tile ? clamp(number, 0, motif.types - 1) : depthIndex(value, motif.types);
       depthMm = depths[depthIdx];
     }
     // The turn, for Turn: the motif's angle, the stamps on top, then the
-    // set snaps or free clamps. Half units are never turned (placeholder rule).
+    // set snaps or free clamps. Half units are never turned (placeholder rule),
+    // nor are cut blocks (the robot split, reading 5): they are cut to the line.
     let rotationDeg = 0;
-    if (motif.vary === 'rotation' && u.size === 'full') {
+    if (motif.vary === 'rotation' && u.size === 'full' && !u.corner && !u.plain && !u.cut) {
       let angle = tile ? angleOfNumber(number, k) : motif.angles === 'free' ? freeAngle(value) : setAngle(value);
       angle = applyTurns(angle, turns, u, layout.p);
       rotationDeg = motif.angles === 'free' ? angle : nearestSetAngle(angle);
