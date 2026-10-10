@@ -14,13 +14,20 @@ const centimetre = (v) => Math.round(v * 100) / 100;
 // the minimum of the blocks to the largest its stretches leave room for,
 // an end stretch whole, an inner one less the arc of its other corner as
 // drawn. Null where the line runs straight on.
+// The corner rounding (2026-10-09): measured on the chain as drawn, so a
+// joined arc's room is its group's, between its outer stretches; a joined
+// point answers for its group.
 export function radiusRange(points, kinds, i, minimum) {
-  const { stretches, corners } = cornersOf(points, kinds);
-  const c = corners[i - 1];
+  const { corners, chain, reduced } = cornersOf(points, kinds);
+  const own = corners[i - 1];
+  if (own && own.kind === 'joined') return radiusRange(points, kinds, own.lead, minimum);
+  const j = reduced.findIndex((x) => x.index === i);
+  const c = reduced[j];
   if (!c || c.kind === 'none') return null;
-  const before = i >= 2 ? corners[i - 2].t : 0;
-  const after = i < corners.length ? corners[i].t : 0;
-  const room = Math.min(stretches[i - 1].length - before, stretches[i].length - after);
+  const length = (a) => Math.hypot(chain[a + 1][0] - chain[a][0], chain[a + 1][1] - chain[a][1]);
+  const before = j >= 1 ? reduced[j - 1].t : 0;
+  const after = j + 1 < reduced.length ? reduced[j + 1].t : 0;
+  const room = Math.min(length(j) - before, length(j + 1) - after);
   return { min: ceilCm(minimum), max: c.k > 0 ? floorCm(room / c.k) : Infinity, set: c.set, drawn: c.radius, kind: c.kind };
 }
 

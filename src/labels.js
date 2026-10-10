@@ -51,6 +51,43 @@ export function lineBoxes(screenPoints, half = 5, step = 8) {
   return boxes;
 }
 
+// The parts of a drawn segment from a to b that run clear of the boxes, each
+// grown by gap: a dimension line breaks where it would cross a word, as on
+// a technical drawing (the drawer jump, 2026-10-09). Each part is [from, to];
+// none where the boxes cover the whole segment.
+export function clearOf([ax, ay], [bx, by], boxes, gap = 2) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const covered = [];
+  for (const b of boxes) {
+    // The stretch of t in [0, 1] inside the box (Liang and Barsky's clipping).
+    let t0 = 0;
+    let t1 = 1;
+    const edge = (p, q) => {
+      if (Math.abs(p) < 1e-12) return q >= 0;
+      const r = q / p;
+      if (p < 0) {
+        if (r > t1) return false;
+        t0 = Math.max(t0, r);
+      } else {
+        if (r < t0) return false;
+        t1 = Math.min(t1, r);
+      }
+      return true;
+    };
+    if (edge(-dx, ax - (b.x0 - gap)) && edge(dx, b.x1 + gap - ax) && edge(-dy, ay - (b.y0 - gap)) && edge(dy, b.y1 + gap - ay) && t1 > t0) covered.push([t0, t1]);
+  }
+  covered.sort((p, q) => p[0] - q[0]);
+  const parts = [];
+  let t = 0;
+  for (const [c0, c1] of covered) {
+    if (c0 > t) parts.push([t, c0]);
+    t = Math.max(t, c1);
+  }
+  if (t < 1) parts.push([t, 1]);
+  return parts.filter(([p, q]) => q - p > 1e-9).map(([p, q]) => [[ax + dx * p, ay + dy * p], [ax + dx * q, ay + dy * q]]);
+}
+
 // The first candidate whose box meets no obstacle and lies inside the
 // drawing, or null. A candidate is { x, y, box, ... }.
 export function place(candidates, obstacles, width, height) {

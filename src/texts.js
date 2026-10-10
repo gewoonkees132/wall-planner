@@ -28,6 +28,15 @@ const mm = (metres) => Math.round(metres * 1000);
 const m2 = (metres) => fixed(metres, 2);
 const m1 = (metres) => fixed(metres, 1);
 const halves = (h) => (h === 1 ? '1 of them a half block' : `${h} of them half blocks`);
+
+// A radius to the centimetre, as every radius reads; but one the page
+// refuses (under the minimum, as fillet.js's refusals) never reads as the
+// minimum: where rounding would give the minimum's figure, it reads one
+// centimetre less (the drawer jump, 2026-10-09).
+export function belowMinimum(radius, minimum) {
+  const shown = m2(radius);
+  return radius < minimum - 1e-9 && shown === m2(minimum) ? m2(Number(m2(minimum)) - 0.01) : shown;
+}
 const degrees = (d) => `${d} ${Math.abs(d) === 1 ? 'degree' : 'degrees'}`;
 
 // Why a wall asks for a worker (the robot split, 2026-10-09): the reasons
@@ -38,10 +47,12 @@ const REASONS = {
   free: 'Blocks turn to their own angles.',
   depth: 'Blocks of more than one depth.',
 };
+// A joined arc is named by its first and last points (the corner rounding).
+const arcName = (first, last) => (!last || last === first ? `Arc ${first}` : last === first + 1 ? `Arcs ${first} and ${last}` : `Arcs ${first} to ${last}`);
 function why(reason) {
   if (reason.kind === 'corner') return `Corner ${reason.point}, ${degrees(reason.degrees)}: cut blocks.`;
-  if (reason.kind === 'arc') return `Arc ${reason.point}, R ${m2(reason.radius)} m: cut blocks.`;
-  if (reason.kind === 'arcTemplate') return `Arc ${reason.point}, R ${m2(reason.radius)} m: with a template.`;
+  if (reason.kind === 'arc') return `${arcName(reason.point, reason.last)}, R ${m2(reason.radius)} m: cut blocks.`;
+  if (reason.kind === 'arcTemplate') return `${arcName(reason.point, reason.last)}, R ${m2(reason.radius)} m: with a template.`;
   return REASONS[reason.kind];
 }
 // The Who row's line: at most two reasons, then how many more.
@@ -108,7 +119,9 @@ export const TEXTS = {
     // Pass 4: each arc's radius is its R dimension; the readout says the limit, once.
     minimumBend: (minimum) => `Minimum bend: ${m2(minimum)} m.`,
     // The line a screen reader hears, which sees no R dimension: the tightest radius against the minimum.
-    spokenBend: (radius, minimum) => `Bend: ${m2(radius)} m, minimum ${m2(minimum)} m.`,
+    spokenBend: (radius, minimum) => `Bend: ${belowMinimum(radius, minimum)} m, minimum ${m2(minimum)} m.`,
+    // An arc's R dimension in the drawing.
+    arcRadius: (radius, minimum) => `R${belowMinimum(radius, minimum)}`,
     // Pass 4: what a refusal, a field or the section says.
     wayBack: 'Move a point, or Undo.',
     nearHint: 'The wall comes too near itself.',
@@ -140,10 +153,20 @@ export const TEXTS = {
     noRoom: (max) => `Room here for R${m2(max)} at most.`,
     lifted: (min) => `Lifted to the minimum, R${m2(min)}.`,
     scaledTo: (drawn) => `Drawn at R${m2(drawn)}, the room there.`,
-    tightRoom: (radius) => `Too tight: room for R${m2(radius)};`,
-    tightSet: (radius) => `Too tight: R${m2(radius)};`,
+    tightRoom: (radius, minimum) => `Too tight: room for R${belowMinimum(radius, minimum)};`,
+    tightSet: (radius, minimum) => `Too tight: R${belowMinimum(radius, minimum)};`,
     tightNeed: (minimum) => `the blocks need R${m2(minimum)}.`,
     fitWayBack: 'Fit, or Undo.',
+    // The corner rounding (docs/specs/configurator-demonstrator-corner-rounding.md,
+    // readings 2, 5 and 11): what a corner's field says lies past its largest
+    // radius, and what a drag did. No line names a bend (pass 4's readout).
+    radiusFrom: (min, room) => `R from ${m2(min)} m; room here for R${m2(room)}.`,
+    pastJoin: (a, b) => `Past it, arcs ${Math.min(a, b)} and ${Math.max(a, b)} join.`,
+    pastGrow: (k) => `Past it, a drag grows stretch ${k}.`,
+    // Each line at most 40 characters, so it fits the drawing on a phone.
+    joined: (first, last, radius) => `${arcName(first, last)}: one arc, R${m2(radius)}.`,
+    grew: (k, metres) => `Stretch ${k} grew to ${m2(metres)} m.`,
+    stopped: (reason) => (reason === 'long' ? `Stopped: the longest wall is ${MAX_LENGTH.toLocaleString('en-GB')} m.` : 'Stopped: the wall comes too near itself.'),
     coursesLabel: 'Earth courses',
     heightValue: (metres) => `${m2(metres)} m`,
     highest: `Highest wall: ${m1(MAX_WALL_HEIGHT)} m.`,

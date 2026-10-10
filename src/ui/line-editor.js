@@ -13,6 +13,11 @@
 // still; a tap picks a point and a tap moves it; Tab walks the numbers; an
 // arc has a handle that pulls its radius between its limits (radius.js);
 // a tight bend says its room and its need, and Fit makes it fit.
+//
+// The corner rounding (docs/specs/configurator-demonstrator-corner-
+// rounding.md, Kees 2026-10-09): an arc's handle always reaches a working
+// radius. A same-way neighbour gives way, then joins as one arc; else the
+// shared stretch grows (rounding.js). A joined arc has one handle.
 
 import { el, svg, svgPoint, key, row } from './dom.js';
 import { BLOCK, BASE_HEIGHT, CAP_HEIGHT, MAX_WALL_HEIGHT, MAX_LENGTH } from '../block.js';
@@ -20,7 +25,8 @@ import { lineKey } from '../linekeys.js';
 import { hitTarget, cursorFor, HIT } from '../linehit.js';
 import { snapPoint } from '../snap.js';
 import { gridStep, scaleLength, gridFrame, toGrid, fromGrid } from '../grid.js';
-import { radiusRange, radiusThrough, fitBend } from '../radius.js';
+import { radiusRange, fitBend } from '../radius.js';
+import { arcDrag, typedRadius, pastLargest } from '../rounding.js';
 import { cornersOf } from '../fillet.js';
 import { frontStrip } from '../floor.js';
 import {
@@ -28,7 +34,7 @@ import {
 } from '../dimensions.js';
 import { PALETTE, TYPE } from '../palette.js';
 import { fixed } from '../texts.js';
-import { textBox, boxAround, lineBoxes, place, ringAround, meets, within } from '../labels.js';
+import { textBox, boxAround, lineBoxes, place, ringAround, meets, within, clearOf } from '../labels.js';
 
 const POINT_RADIUS = 7; // a disc of 14 px [R]
 const GHOST_RADIUS = 4; // a hollow disc of 8 px, placeholder
@@ -265,11 +271,14 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
       const range = radiusRange(model.points, model.corners, index, model.minimum);
       const set = range && range.kind === 'round' ? range.set : range ? range.drawn : 0;
       shown = fixed(Number.isFinite(set) ? set : 0, 2);
-      if (range && range.max < range.min) fieldHint = [texts.noRoom(range.max)];
+      // Reading 5: the floor and the room as the stretches stand, then what a drag does past it.
+      if (range && range.max < range.min) fieldHint = [texts.radiusFrom(range.min, range.max)];
       else if (range) {
         fieldHint = [texts.radiusRange(range.min, range.max)];
         if (range.kind === 'round' && range.drawn < range.set - 0.005) fieldHint.unshift(texts.radiusSet(range.set, range.drawn));
       }
+      const past = range ? pastLargest({ points: model.points, corners: model.corners }, index) : null;
+      if (past) fieldHint.push(past.kind === 'join' ? texts.pastJoin(index + 1, past.with + 1) : texts.pastGrow(past.stretch + 1));
     }
     editing = { kind, index, shown, byKey: initial !== null || byKey };
     const box = fieldBox(kind, index);
@@ -312,10 +321,15 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
       // Under the minimum it is lifted to it; where the overlap rule scales
       // it, the hint says the radius drawn (pass 5, part 13.1, rule 7).
       const { value, lifted } = liftRadius(read.value, model.minimum);
-      const corners = withCornerRadius(model.corners, index, value);
-      const drawn = value > 0 ? cornersOf(points, corners).corners[index - 1] : null;
-      flash = lifted ? texts.lifted(value) : drawn && drawn.radius < value - 0.005 ? texts.scaledTo(drawn.radius) : '';
-      send('replace', points, corners);
+      // The corner rounding, reading 1: a typed radius makes a same-way
+      // neighbour give way or join, as a drag to it does; no point moves.
+      const next = value > 0 ? typedRadius({ points, corners: model.corners }, index, value, { minimum: model.minimum })
+        : { points, corners: withCornerRadius(model.corners, index, value), happened: null };
+      const drawn = value > 0 ? cornersOf(next.points, next.corners).corners[index - 1] : null;
+      const joined = next.happened && next.happened.joined;
+      flash = lifted ? texts.lifted(value) : drawn && drawn.radius < value - 0.005 ? texts.scaledTo(drawn.radius)
+        : joined ? texts.joined(joined.first + 1, joined.last + 1, value) : '';
+      send('replace', next.points, next.corners);
     } else {
       draw();
     }
@@ -381,9 +395,11 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
     flash = '';
     hover = null;
     if (target.type === 'arc') {
-      // The arc's handle pulls its radius between its limits (pass 5, rule 7).
+      // The arc's handle pulls its radius (pass 5, rule 7), from the state at
+      // the press: past its room a neighbour gives way and joins, or a
+      // stretch grows (the corner rounding). memo keeps what the drag scanned.
       armed = false;
-      drag = { arc: target.index, range: radiusRange(points, corners, target.index, model.minimum), pointerId: event.pointerId, points, corners, at, moved: false };
+      drag = { arc: target.index, start: { points, corners }, press: toPlan(at), memo: {}, pointerId: event.pointerId, points, corners, at, moved: false };
       setCursor();
       drawing.setPointerCapture(event.pointerId);
       onEdit({ type: 'begin' });
@@ -483,16 +499,29 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
       armed = false;
     }
     if ('arc' in drag) {
-      const { range } = drag;
-      if (!range || range.max < range.min) return;
-      const radius = Math.min(range.max, Math.max(range.min, radiusThrough(drag.points, drag.arc, toPlan([local.x, local.y]))));
-      drag.corners[drag.arc - 1] = Math.round(radius * 100) / 100;
-      send('move', drag.points, drag.corners);
+      const r = arcDrag(drag.start, drag.arc, toPlan([local.x, local.y]), {
+        minimum: model.minimum, press: drag.press, refuse: model.refuse, cm: true, memo: drag.memo,
+      });
+      drag.points = r.points;
+      drag.corners = r.corners;
+      flash = dragWords(r);
+      send('move', r.points, r.corners);
       return;
     }
     drag.points[drag.index] = snapPoint(drag.points, drag.index, toPlan([local.x, local.y]), grid.step, grid.frame);
     send('move', drag.points, drag.corners);
   });
+
+  // What a drag on an arc did, for the hint line (reading 11): a stop, a join,
+  // the stretches that grew.
+  function dragWords(r) {
+    const lines = [];
+    if (r.stopped) lines.push(texts.stopped(r.stopped));
+    const h = r.happened;
+    if (h && h.joined) lines.push(texts.joined(h.joined.first + 1, h.joined.last + 1, r.radius));
+    if (h) for (const g of h.grew.slice(0, Math.max(0, 3 - lines.length))) lines.push(texts.grew(g.stretch + 1, g.length, g.after));
+    return lines.length ? lines : '';
+  }
 
   function endDrag(event) {
     if (!drag || event.pointerId !== drag.pointerId) return;
@@ -593,7 +622,7 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
         return;
       }
       flash = '';
-      openField('radius', at, null, true);
+      openField('radius', c.kind === 'joined' ? c.lead : at, null, true);
       return;
     }
     const base = current();
@@ -657,7 +686,7 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
   // A cut corner's arc: in the grey on the paper; in the paper where it lies on the robot's ink, inside the corner on its front side.
   const cutMarks = svg('path', { class: 'cut-mark', stroke: GREY, 'stroke-width': 1, fill: 'none', 'pointer-events': 'none' });
   const cutMarksOnInk = svg('path', { class: 'cut-mark', stroke: PAPER, 'stroke-width': 2, fill: 'none', 'pointer-events': 'none' });
-  const linePath = svg('path', { stroke: INK, 'stroke-width': 2.5, fill: 'none' });
+  const linePath = svg('path', { class: 'base-line', stroke: INK, 'stroke-width': 2.5, fill: 'none' });
   const redLayer = layer();
   const endMark = svg('line', { stroke: INK, 'stroke-width': 2 });
   const dimLines = svg('path', { class: 'dimension-lines', stroke: GREY, 'stroke-width': 1, fill: 'none', 'pointer-events': 'none' });
@@ -804,12 +833,16 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
     pool(ghostLayer, shownGhosts.length, () => svg('circle', { class: 'ghost', r: GHOST_RADIUS, fill: PAPER, stroke: INK, 'stroke-width': 1.5 }))
       .forEach((node, i) => attrs(node, { cx: shownGhosts[i].screen[0], cy: shownGhosts[i].screen[1] }));
     // Pass 5 (part 13.1, rule 7): a handle at the middle of each arc, a hollow diamond.
+    // A joined arc has one handle, on its first corner (the corner rounding).
     arcs = (line.corners || []).filter((c) => (c.kind === 'free' || c.kind === 'round') && c.radius > 0 && c.t > 1e-9)
-      .map((c) => { const m = line.pointAt(c.s); return { index: c.index, screen: toScreen([m.x, m.y]) }; });
+      .map((c) => { const m = line.pointAt(c.s); return { index: c.index, last: c.group ? c.group.last : c.index, radius: c.radius, screen: toScreen([m.x, m.y]) }; });
     pool(arcLayer, arcs.length, () => svg('path', { class: 'arc-handle', fill: PAPER, stroke: INK, 'stroke-width': 1.5 }))
       .forEach((node, i) => {
         const [ax, ay] = arcs[i].screen;
-        attrs(node, { d: `M${ax.toFixed(1)} ${(ay - HANDLE).toFixed(1)} L${(ax + HANDLE).toFixed(1)} ${ay.toFixed(1)} L${ax.toFixed(1)} ${(ay + HANDLE).toFixed(1)} L${(ax - HANDLE).toFixed(1)} ${ay.toFixed(1)} Z` });
+        attrs(node, {
+          d: `M${ax.toFixed(1)} ${(ay - HANDLE).toFixed(1)} L${(ax + HANDLE).toFixed(1)} ${ay.toFixed(1)} L${ax.toFixed(1)} ${(ay + HANDLE).toFixed(1)} L${(ax - HANDLE).toFixed(1)} ${ay.toFixed(1)} Z`,
+          'data-index': arcs[i].index, 'data-last': arcs[i].last, 'data-radius': arcs[i].radius.toFixed(3),
+        });
       });
     const hoverAt = !hover || drag ? null : hover.type === 'point' ? toScreen(points[hover.index])
       : hover.type === 'arc' ? (arcs.find((a) => a.index === hover.index) || {}).screen : toScreen(hover.plan);
@@ -859,7 +892,7 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
     }
     if (!c) return [texts.refusedHint];
     const room = c.kind === 'free' || c.radius < c.set - 0.005;
-    return [room ? texts.tightRoom(c.radius) : texts.tightSet(c.radius), texts.tightNeed(model.minimum), fix ? texts.fitWayBack : texts.wayBack];
+    return [room ? texts.tightRoom(c.radius, model.minimum) : texts.tightSet(c.radius, model.minimum), texts.tightNeed(model.minimum), fix ? texts.fitWayBack : texts.wayBack];
   }
 
   // The words of the drawing, each in its place and none on another: the hint
@@ -882,8 +915,8 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
       tone = RED;
       said = lines.join(' ');
     } else if (flash) {
-      lines = [flash];
-      said = flash;
+      lines = Array.isArray(flash) ? flash : [flash];
+      said = lines.join(' ');
     } else if (model.tooShort) {
       lines = [texts.outOfRange];
       said = texts.outOfRange;
@@ -909,6 +942,8 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
 
     const obstacles = lines.map((text, i) => (text && boxOf(hintTexts[i])) || textBox(text, 10, 16 + HINT_LINE * i, { size: CAPTION }));
     obstacles.push(textBox(`${fixed(grid.scale, 2)} m`, 16 + view.scale * grid.scale, height - 9, { size: CAPTION }));
+    // The words drawn so far, the hint and the scale's; a dimension line breaks where it would cross a word.
+    const words = [...obstacles];
     obstacles.push({ x0: 10, x1: 10 + view.scale * grid.scale, y0: height - 16, y1: height - 8 });
     arcs.forEach((a) => obstacles.push(boxAround(a.screen[0], a.screen[1], HANDLE + 4)));
     const bend = model.bend;
@@ -920,6 +955,7 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
       // Its drawn box, from the browser: wide letters reach past the estimate.
       const rb = textBox(text, planWidth - 10, height - 10, { size: CAPTION, anchor: 'end' });
       obstacles.push(boxOf(readoutText) || { x0: rb.x0 - 4, x1: rb.x1 + 4, y0: rb.y0 - 4, y1: rb.y1 + 4 });
+      words.push(obstacles.at(-1));
     } else {
       attrs(readoutText, { visibility: 'hidden' });
     }
@@ -972,7 +1008,7 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
       const dl = Math.hypot(cx - mx, cy - my) || 1;
       const vx = (cx - mx) / dl;
       const vy = (cy - my) / dl;
-      const text = `R${fixed(c.radius, 2)}`;
+      const text = texts.arcRadius(c.radius, model.minimum);
       const ways = [];
       for (const dd of [20, 32, 44]) {
         for (const turn of [0, 35, -35, 70, -70, 180]) {
@@ -1043,6 +1079,8 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
           break;
         }
       }
+      // Every word placed: the radii and the numbers, beside the hint, the scale and the readout.
+      const placed = [...words, ...shown.filter((d) => d.text).map((d) => d.box), ...lens.filter((d) => d.spot).map((d) => d.spot.box)];
       for (const { k, a, b, ux, uy, bx, by, mx, my, text, spot } of lens) {
         if (!spot) continue;
         // The dimension line: 8 px out on the back; on the front, 4 px out, inside the band, clear of its number.
@@ -1051,7 +1089,13 @@ export function createLineEditor(root, { texts, keys, onEdit }) {
         const ox = bx * off;
         const oy = by * off;
         const tick = (x, y) => `M${(x - 3 * (ux + bx)).toFixed(1)} ${(y - 3 * (uy + by)).toFixed(1)} L${(x + 3 * (ux + bx)).toFixed(1)} ${(y + 3 * (uy + by)).toFixed(1)}`;
-        marksD.push(`M${(a[0] + ox).toFixed(1)} ${(a[1] + oy).toFixed(1)} L${(b[0] + ox).toFixed(1)} ${(b[1] + oy).toFixed(1)} ${tick(a[0] + ox, a[1] + oy)} ${tick(b[0] + ox, b[1] + oy)}`);
+        // It breaks where it would cross a word (the drawer jump, 2026-10-09); a tick under a word is not drawn.
+        // Its own number stands clear of it already, by its placing.
+        const others = placed.filter((w) => w !== spot.box);
+        const clear = ([x, y]) => !others.some((w) => x > w.x0 - 2 && x < w.x1 + 2 && y > w.y0 - 2 && y < w.y1 + 2);
+        const ends = [[a[0] + ox, a[1] + oy], [b[0] + ox, b[1] + oy]];
+        const runs = clearOf(ends[0], ends[1], others).map(([p, q]) => `M${p[0].toFixed(1)} ${p[1].toFixed(1)} L${q[0].toFixed(1)} ${q[1].toFixed(1)}`);
+        marksD.push([...runs, ...ends.filter(clear).map(([x, y]) => tick(x, y))].join(' '));
         shown.push({ kind: 'length', index: k, text, x: spot.x, y: spot.y, box: spot.box });
         // Front and Start keep off the dimension lines (pass 4).
         const from = [a[0] + bx * off, a[1] + by * off];

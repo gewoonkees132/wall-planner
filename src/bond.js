@@ -17,7 +17,7 @@ export function cutArcs(line, cutBelow = 0) {
   if (!(cutBelow > 0) || !line.corners) return [];
   return line.corners
     .filter((c) => (c.kind === 'free' || c.kind === 'round') && c.t > 1e-9 && c.radius < cutBelow - 1e-9)
-    .map((c) => ({ from: c.from, to: c.to, radius: c.radius, point: c.index + 1 }));
+    .map((c) => ({ from: c.from, to: c.to, radius: c.radius, point: c.index + 1, last: (c.group ? c.group.last : c.index) + 1 }));
 }
 
 // The arc a span from a to b lies on most, if it touches one.
@@ -232,7 +232,7 @@ export function layOnLine(line, { courses, rotation = false, depthMm = BLOCK.dep
     course.forEach((u, i) => {
       const position = u.position + shifts[i];
       const point = line.pointAt(position);
-      const cut = u.arc ? { ...arcCut(line.pointAt, position, u.span), at: { kind: 'arc', point: u.arc.point, radius: u.arc.radius } } : null;
+      const cut = u.arc ? { ...arcCut(line.pointAt, position, u.span), at: { kind: 'arc', point: u.arc.point, last: u.arc.last, radius: u.arc.radius } } : null;
       units.push(makeUnit({
         course: r, index: i + 1, size: u.size, n, position, span: u.span,
         x: point.x, y: point.y, bearing: point.bearing, plain: Boolean(cut), cut,

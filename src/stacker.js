@@ -20,11 +20,13 @@ const EPS = 1e-9;
 const inSet = (angle) => SET_ANGLES.some((a) => Math.abs(a - angle) < EPS);
 const keyOf = (reason) => `${reason.kind}|${reason.point ?? ''}`;
 
-// The arcs of a line, as the drawer draws them: { from, to, radius, point }.
+// The arcs of a line, as the drawer draws them: { from, to, radius, point,
+// last }; a joined arc once, from its first point to its last (the corner
+// rounding, 2026-10-09).
 function arcsOf(line) {
   return ((line && line.corners) || [])
     .filter((c) => (c.kind === 'free' || c.kind === 'round') && c.radius > 0 && c.t > 1e-9)
-    .map((c) => ({ from: c.from, to: c.to, radius: c.radius, point: c.index + 1 }));
+    .map((c) => ({ from: c.from, to: c.to, radius: c.radius, point: c.index + 1, last: (c.group ? c.group.last : c.index) + 1 }));
 }
 
 // The worker of one earth unit and why, from its cut, its turn and the arc it lies on.
@@ -34,8 +36,8 @@ export function workerOf(u, arcs, bands, depths = 1) {
   if (turned && !inSet(u.rotationDeg)) return { by: 'robot', reason: { kind: 'free' } };
   if (turned) return { by: 'template', reason: { kind: 'set' } };
   const arc = arcs.find((a) => u.position >= a.from - EPS && u.position <= a.to + EPS);
-  if (arc && arc.radius < bands.hand - EPS) return { by: 'robot', reason: { kind: 'arc', point: arc.point, radius: arc.radius } };
-  if (arc && arc.radius < bands.template - EPS) return { by: 'template', reason: { kind: 'arcTemplate', point: arc.point, radius: arc.radius } };
+  if (arc && arc.radius < bands.hand - EPS) return { by: 'robot', reason: { kind: 'arc', point: arc.point, last: arc.last, radius: arc.radius } };
+  if (arc && arc.radius < bands.template - EPS) return { by: 'template', reason: { kind: 'arcTemplate', point: arc.point, last: arc.last, radius: arc.radius } };
   return { by: 'hand', reason: { kind: depths > 1 ? 'depth' : 'none' } };
 }
 

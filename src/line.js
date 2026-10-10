@@ -5,7 +5,7 @@
 // Pure: no browser objects.
 
 import { BLOCK, LENGTH_STEP, MAX_LENGTH } from './block.js';
-import { cornersOf } from './fillet.js';
+import { cornersOf, stretchesOf } from './fillet.js';
 
 export const SAMPLE_STEP = 0.005; // m, placeholder
 const DENSE_STEP = 0.002; // m, the line is drawn this finely before resampling
@@ -84,24 +84,30 @@ function fromDense(dense, knotIndices) {
 // straight line.
 export function baseLine(points, kinds = []) {
   const P = points.map(([x, y]) => [x, y]);
-  const n = P.length;
-  const { stretches, corners } = cornersOf(P, kinds);
+  const { stretches, corners, chain, reduced } = cornersOf(P, kinds);
+  // The corner rounding (part 4.2 of docs/specs/configurator-demonstrator-
+  // corner-rounding.md): a joined group is drawn as one corner at X, so the
+  // line is drawn on the chain of the groups' points; its corners are then
+  // mapped back to one per inner point.
+  const C = chain.map(([x, y]) => [x, y]);
+  const n = C.length;
+  const legs = chain === points ? stretches : stretchesOf(C);
   const dense = [];
   const push = (x, y) => {
     const last = dense.at(-1);
     if (!last || Math.hypot(x - last[0], y - last[1]) > 1e-12) dense.push([x, y]);
   };
-  const spans = []; // per corner: the dense indices of its arc, or of the corner
-  push(P[0][0], P[0][1]);
+  const spans = []; // per corner of the chain: the dense indices of its arc, or of the corner
+  push(C[0][0], C[0][1]);
   for (let s = 0; s + 1 < n; s++) {
-    const st = stretches[s];
-    const endT = s + 1 <= n - 2 ? corners[s].t : 0;
+    const st = legs[s];
+    const endT = s + 1 <= n - 2 ? reduced[s].t : 0;
     const from = dense.at(-1);
-    const to = [P[s + 1][0] - st.ux * endT, P[s + 1][1] - st.uy * endT];
+    const to = [C[s + 1][0] - st.ux * endT, C[s + 1][1] - st.uy * endT];
     const steps = Math.max(1, Math.ceil(Math.hypot(to[0] - from[0], to[1] - from[1]) / DENSE_STEP));
     for (let i = 1; i <= steps; i++) push(from[0] + ((to[0] - from[0]) * i) / steps, from[1] + ((to[1] - from[1]) * i) / steps);
     if (s + 1 > n - 2) break;
-    const c = corners[s];
+    const c = reduced[s];
     const span = { from: dense.length - 1, to: dense.length - 1, centre: null };
     if (c.t > 1e-9 && (c.kind === 'free' || c.kind === 'round')) {
       const R = c.radius;
@@ -120,34 +126,38 @@ export function baseLine(points, kinds = []) {
     spans.push(span);
   }
   if (dense.length === 1) dense.push(dense[0].slice());
-  const knots = [0, ...spans.map((sp) => Math.round((sp.from + sp.to) / 2)), dense.length - 1];
+  const middles = spans.map((sp) => Math.round((sp.from + sp.to) / 2));
+  // One knot per inner point: a joined group's points share its arc's middle.
+  const spanOf = corners.map((c) => reduced.findIndex((r) => r.index === (c.kind === 'joined' ? c.lead : c.index)));
+  const knots = [0, ...spanOf.map((j) => middles[j]), dense.length - 1];
   const line = fromDense(dense, knots);
   const cumulative = [0];
   for (let i = 1; i < dense.length; i++) {
     cumulative.push(cumulative[i - 1] + Math.hypot(dense[i][0] - dense[i - 1][0], dense[i][1] - dense[i - 1][1]));
   }
   line.stretches = stretches;
-  line.corners = corners.map((c, j) => ({
-    ...c, from: cumulative[spans[j].from], to: cumulative[spans[j].to], s: line.knots[j + 1], centre: spans[j].centre,
-  }));
+  line.corners = corners.map((c, j) => {
+    const sp = spans[spanOf[j]];
+    return { ...c, from: cumulative[sp.from], to: cumulative[sp.to], s: line.knots[j + 1], centre: sp.centre };
+  });
   // The runs: cut at every sharp corner, numbered from the start.
   const cuts = [];
-  corners.forEach((c, j) => { if (c.kind === 'sharp') cuts.push({ at: spans[j].from, number: cuts.length + 1, j }); });
+  reduced.forEach((c, j) => { if (c.kind === 'sharp') cuts.push({ at: spans[j].from, number: cuts.length + 1, j }); });
   line.runs = [];
   let begin = 0;
   let startCorner = 0;
-  let startBearing = stretches[0].bearing;
+  let startBearing = legs[0].bearing;
   for (const cut of [...cuts, { at: dense.length - 1, number: 0, j: -1 }]) {
     const piece = dense.slice(begin, cut.at + 1);
     const runLine = piece.length > 1 ? fromDense(piece, [0, piece.length - 1]) : fromDense([piece[0], piece[0]], [0, 1]);
-    const endBearing = cut.j >= 0 ? stretches[cut.j].bearing : stretches.at(-1).bearing;
+    const endBearing = cut.j >= 0 ? legs[cut.j].bearing : legs.at(-1).bearing;
     line.runs.push({
       start: cumulative[begin], length: runLine.length, line: runLine, startCorner, endCorner: cut.number,
       first: piece[0], last: piece.at(-1), startBearing, endBearing,
     });
     begin = cut.at;
     startCorner = cut.number;
-    if (cut.j >= 0) startBearing = stretches[cut.j + 1].bearing;
+    if (cut.j >= 0) startBearing = legs[cut.j + 1].bearing;
   }
   return line;
 }

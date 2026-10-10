@@ -3,7 +3,7 @@
 // functions compute the wall; the 3D view, the editors and the information
 // redraw from that result, once per animation frame.
 
-import { BLOCK, MAX_TURNS, MORTAR_ABOVE } from './block.js';
+import { BLOCK, MAX_TURNS, MORTAR_ABOVE, MAX_LENGTH } from './block.js';
 import { TEXTS } from './texts.js';
 import {
   defaultState, withCourses, withPreset, withDigit, withVary, withAngles, withColourOn, withTypes,
@@ -16,7 +16,7 @@ import { orderList, summary } from './counts.js';
 import { activeTile, patternTypes, deepestDepth } from './mapping.js';
 import { presetTile, IMAGE_PRESETS, PATTERN_PRESETS, isImage } from './motif.js';
 import { baseLine } from './line.js';
-import { bendBands } from './limits.js';
+import { bendBands, nearItself } from './limits.js';
 import { pitchOf, wallHeight } from './bond.js';
 import { whoStacks } from './stacker.js';
 import { createView3d } from './view3d.js';
@@ -48,6 +48,9 @@ let turnHistory = [];
 // Pass 4 (part 12.1, rule 13): the order of the drawer's edits and the turns, for Ctrl+Z.
 const edits = createEdits();
 let dragging = false;
+// The corner rounding: the address and the wall shown when a drag began, so
+// a drag that ends where it began leaves both as they were.
+let dragStart = null;
 let scheduled = false;
 let dirty = false; // the state changed and its wall is not computed yet
 let addressTimer = null;
@@ -172,10 +175,18 @@ function remember() {
 }
 const unchanged = () => drawerHistory.length > 0 && snapshot(drawerHistory.at(-1)) === snapshot(state);
 // An edit that changed nothing leaves no step to undo (pass 4, part 12.1, rule 6).
+// A drag that ends where it began also leaves the address and the wall shown
+// as they were, though it passed through walls that fit and were written
+// (the corner rounding: a walk back gives the start's address again).
 function dropIfUnchanged() {
   if (!unchanged()) return;
   drawerHistory.pop();
   edits.forget('drawer');
+  if (dragStart) {
+    clearTimeout(addressTimer);
+    fitting = dragStart.fitting;
+    if (location.hash !== dragStart.address) history.replaceState(null, '', dragStart.address);
+  }
 }
 function undoDrawer() {
   if (!drawerHistory.length) return;
@@ -194,12 +205,15 @@ const lineEditor = createLineEditor(lineRoot, {
     if (type === 'begin') {
       remember();
       dragging = true;
+      settle();
+      dragStart = { address: location.hash, fitting };
     } else if (type === 'move') {
       act(apply);
     } else if (type === 'end') {
       dragging = false;
       act(apply);
       dropIfUnchanged();
+      dragStart = null;
       schedule();
     } else if (type === 'replace') {
       remember();
@@ -374,6 +388,12 @@ function render() {
     notes,
     // The robot split: the band split by worker, for a line that fits.
     split: wall.ok && wall.split ? wall.split.subsections : [],
+    // The corner rounding (reading 2): what besides a tight arc refuses a dragged state.
+    refuse: (s) => {
+      const drawn = baseLine(s.points, s.corners);
+      if (drawn.length > MAX_LENGTH + 1e-9) return 'long';
+      return nearItself(drawn, { rotation: state.vary === 'rotation', depthMm: deepestDepth(state) }) ? 'near' : null;
+    },
   });
   if (!isImage(state.preset)) {
     patternEditor.update({
